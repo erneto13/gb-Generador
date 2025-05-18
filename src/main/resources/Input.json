@@ -1,0 +1,42 @@
+[
+  {
+    "projectName": "MyProject",
+    "type": "Package",
+    "name": "MyPackage",
+    "classes": [
+      {
+        "className": "Person",
+        "isEntity": true,
+        "fields": [
+          { "name": "id", "type": "int", "isIdField": true, "generationStrategy": "AUTO" },
+          { "name": "field2", "type": "int" },
+          { "name": "Name", "type": "String" },
+          { "name": "Age", "type": "int" }
+        ],
+        "relationships": [
+          {
+            "type": "OneToMany",
+            "targetEntity": "ClassName2",
+            "mappedBy": "className1"
+          }
+        ]
+      },
+      {
+        "className": "ClassName2",
+        "isEntity": true,
+        "fields": [
+          { "name": "field3", "type": "String" },
+          { "name": "field4", "type": "int" }
+        ]
+      },
+      {
+        "className": "ClassName3",
+        "isEntity": false,
+        "fields": [
+          { "name": "field5", "type": "boolean" },
+          { "name": "field6", "type": "int" }
+        ]
+      }
+    ]
+  }
+]
