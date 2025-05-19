@@ -1,0 +1,33 @@
+//package
+package com.${projectName}.services;
+
+import com.${projectName}.repository.${class.className}Repository;
+import com.${projectName}.${packageName}.${class.className};
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class ${class.className}Service {
+
+    @Autowired
+    private ${class.className}Repository repository;
+
+    public List<${class.className}> findAll() {
+        return repository.findAll();
+    }
+
+    public ${class.className} save(${class.className} entity) {
+        return repository.save(entity);
+    }
+
+    public ${class.className} findById(${class.idType} id) {
+        return repository.findById(id).orElse(null);
+    }
+
+    public void delete(${class.idType} id) {
+        repository.deleteById(id);
+    }
+}

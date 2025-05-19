@@ -2,7 +2,9 @@ package util;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.io.File;
+
 import org.apache.velocity.Template;
 import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.context.Context;
@@ -13,10 +15,12 @@ import java.util.HashMap;
 
 public class ClassGenerator {
     private JSONArray jsonArray;
+
     public ClassGenerator(JSONArray jsonArray) {
         this.jsonArray = jsonArray;
     }
-    public void generate(){
+
+    public void generate() {
 
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject object = jsonArray.getJSONObject(i);
@@ -25,22 +29,25 @@ public class ClassGenerator {
             generatePackage("controllers", projectName);
             generatePackage("repository", projectName);
             generatePackage("standalone", projectName);
-            if(type.equals("Package")){
+
+            if (type.equals("Package")) {
                 String packageName = object.getString("name");
                 generatePackage(packageName, projectName);
                 JSONArray classes = object.getJSONArray("classes");
-                for(int j = 0; j < classes.length(); j++){
-                    generateClass(classes.getJSONObject(j), packageName,projectName);
+                for (int j = 0; j < classes.length(); j++) {
+                    generateClass(classes.getJSONObject(j), packageName, projectName);
                 }
-            }else if(type.equals("Class")){
-                generateClass(object, "Standalone",projectName);
+            } else if (type.equals("Class")) {
+                generateClass(object, "Standalone", projectName);
             }
         }
     }
-    public void generatePackage(String packageName, String projectName){
+
+    public void generatePackage(String packageName, String projectName) {
         File packageDir = new File("output/" + projectName + "/" + packageName);
         if (!packageDir.exists()) packageDir.mkdirs();
     }
+
     public void generateClass(JSONObject classe, String packageName, String projectName) {
         String classPath = "output/" + projectName + "/" + packageName + "/" + classe.getString("className") + ".java";
         try {
@@ -73,32 +80,25 @@ public class ClassGenerator {
             e.printStackTrace();
         }
     }
-    public String getClass(String type){
-        if(type.equalsIgnoreCase("int") || type.equalsIgnoreCase("Integer")){
+
+    public String getClass(String type) {
+        if (type.equalsIgnoreCase("int") || type.equalsIgnoreCase("Integer")) {
             return "int";
-        }
-        else if(type.equalsIgnoreCase("long") || type.equalsIgnoreCase("Long")){
+        } else if (type.equalsIgnoreCase("long") || type.equalsIgnoreCase("Long")) {
             return "long";
-        }
-        else if(type.equalsIgnoreCase("double") || type.equalsIgnoreCase("Double")){
+        } else if (type.equalsIgnoreCase("double") || type.equalsIgnoreCase("Double")) {
             return "double";
-        }
-        else if(type.equalsIgnoreCase("float") || type.equalsIgnoreCase("Float")){
+        } else if (type.equalsIgnoreCase("float") || type.equalsIgnoreCase("Float")) {
             return "float";
-        }
-        else if(type.equalsIgnoreCase("boolean") || type.equalsIgnoreCase("Boolean")){
+        } else if (type.equalsIgnoreCase("boolean") || type.equalsIgnoreCase("Boolean")) {
             return "boolean";
-        }
-        else if(type.equalsIgnoreCase("char") || type.equalsIgnoreCase("Character")){
+        } else if (type.equalsIgnoreCase("char") || type.equalsIgnoreCase("Character")) {
             return "char";
-        }
-        else if(type.equalsIgnoreCase("byte") || type.equalsIgnoreCase("Byte")){
+        } else if (type.equalsIgnoreCase("byte") || type.equalsIgnoreCase("Byte")) {
             return "byte";
-        }
-        else if(type.equalsIgnoreCase("short") || type.equalsIgnoreCase("Short")){
+        } else if (type.equalsIgnoreCase("short") || type.equalsIgnoreCase("Short")) {
             return "short";
-        }
-        else{
+        } else {
             return "Object";
         }
     }
