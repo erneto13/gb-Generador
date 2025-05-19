@@ -1,4 +1,4 @@
-package Util;
+package util;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -6,10 +6,8 @@ import java.io.File;
 import org.apache.velocity.Template;
 import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.context.Context;
-import org.apache.velocity.runtime.RuntimeSingleton;
 
 import java.io.FileWriter;
-import java.io.IOException;
 import java.io.StringWriter;
 import java.util.HashMap;
 
@@ -24,9 +22,9 @@ public class ClassGenerator {
             JSONObject object = jsonArray.getJSONObject(i);
             String type = object.getString("type");
             String projectName = object.getString("projectName");
-            generatePackage("Controllers", projectName);
-            generatePackage("Repositories", projectName);
-            generatePackage("Standalone", projectName);
+            generatePackage("controllers", projectName);
+            generatePackage("repository", projectName);
+            generatePackage("standalone", projectName);
             if(type.equals("Package")){
                 String packageName = object.getString("name");
                 generatePackage(packageName, projectName);
