@@ -20,7 +20,6 @@ public class ${class.className} {
         #if($field.generationStrategy == "IDENTITY")
         @GeneratedValue(strategy = GenerationType.IDENTITY)
         #elseif($field.generationStrategy == "SEQUENCE")
-        @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "${field.name}_seq")
         @SequenceGenerator(name = "${field.name}_seq", sequenceName = "${field.name}_seq", allocationSize = 1)
         #else
         @GeneratedValue(strategy = GenerationType.AUTO)
