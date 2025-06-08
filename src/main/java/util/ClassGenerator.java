@@ -15,6 +15,12 @@ import org.apache.velocity.context.Context;
 
 public class ClassGenerator {
 
+    // Directorios de rutas
+    private static final String OUTPUT_DIR = "output";
+    private static final String JAVA_FILES_DIR = "JavaFiles";
+    private static final String TS_FILES_DIR = "TsFiles";
+    private static final String TEMPLATES_DIR = "src/main/resources/templates/";
+
     private JSONArray jsonArray;
 
     public ClassGenerator(JSONArray jsonArray) {
@@ -88,7 +94,7 @@ public class ClassGenerator {
             for (String template : javaTemplates) {
                 VelocityEngine velocityEngine = new VelocityEngine();
                 velocityEngine.init();
-                Template jTemplate = velocityEngine.getTemplate("src/main/resources/Templates/" + template);
+                Template jTemplate = velocityEngine.getTemplate(TEMPLATES_DIR + template);
                 Context context = new org.apache.velocity.VelocityContext();
                 StringWriter writer = new StringWriter();
                 String packageTarget = javaPackagesToTemplates.get(template);
@@ -126,7 +132,7 @@ public class ClassGenerator {
             for (String template : tsTemplates) {
                 VelocityEngine velocityEngine = new VelocityEngine();
                 velocityEngine.init();
-                Template tsTemplate = velocityEngine.getTemplate("src/main/resources/Templates/" + template);
+                Template tsTemplate = velocityEngine.getTemplate(TEMPLATES_DIR + template);
                 Context context = new org.apache.velocity.VelocityContext();
                 StringWriter writer = new StringWriter();
                 String packageTarget = tsPackagesToTemplates.get(template);
