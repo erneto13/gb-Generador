@@ -14,6 +14,7 @@ import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.context.Context;
 
 public class ClassGenerator {
+
     private JSONArray jsonArray;
 
     public ClassGenerator(JSONArray jsonArray) {
@@ -33,8 +34,8 @@ public class ClassGenerator {
             generatePackage("JavaFiles/repositories", projectName);
             generatePackage("JavaFiles/services", projectName);
             generatePackage("JavaFiles/models", projectName);
-            generatePackage("TsFiles/models", projectName);
-            generatePackage("TsFiles/service", projectName);
+            generatePackage("TsFiles/interfaces", projectName);
+            generatePackage("TsFiles/services", projectName);
 
             // 2. Procesar la lista de paquetes personalizados, si existe
             if (projectObject.has("package")) {
@@ -80,8 +81,8 @@ public class ClassGenerator {
         javaPackagesToTemplates.put("RepositoryTemplate.vm", "repositories");
         javaPackagesToTemplates.put("ServiceTemplate.vm", "services");
         HashMap<String, String> tsPackagesToTemplates = new HashMap<>();
-        tsPackagesToTemplates.put("TsModelTemplate.vm", "models");
-        tsPackagesToTemplates.put("TsServiceTemplate.vm", "service");
+        tsPackagesToTemplates.put("TsModelTemplate.vm", "interfaces");
+        tsPackagesToTemplates.put("TsServiceTemplate.vm", "services");
         try {
             // Generación de archivos Java
             for (String template : javaTemplates) {
@@ -101,7 +102,7 @@ public class ClassGenerator {
                     file = new File(baseJavaPath + packageName + "/" + fileName + ".java");
                 } else {
                     // Los archivos de Controller, Service, Repository usan sufijos y van a sus paquetes estándar
-                    String suffix = packageTarget.substring(0, 1).toUpperCase() + packageTarget.substring(1, packageTarget.length() -1); // Controller, Service, etc.
+                    String suffix = packageTarget.substring(0, 1).toUpperCase() + packageTarget.substring(1, packageTarget.length() - 1); // Controller, Service, etc.
                     fileName += suffix;
                     file = new File(baseJavaPath + packageTarget + "/" + fileName + ".java");
                 }
@@ -168,8 +169,7 @@ public class ClassGenerator {
             return "short";
         } else if (type.equalsIgnoreCase("String")) {
             return "String";
-        }
-        else {
+        } else {
             return "Object";
         }
     }
