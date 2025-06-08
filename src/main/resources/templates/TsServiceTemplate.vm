@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject, Observer, tap } from 'rxjs';
-import { ${class.className} } from '../../../models/${class.className}';
+import { ${class.className} } from '../../../interfaces/${class.className}';
 
 @Injectable({
 providedIn: 'root'
@@ -19,13 +19,13 @@ export class ${class.className}Service {
          return this.http.get<${class.className}[]>(this.baseUrl);
     }
     create${class.className} (${class.className.toLowerCase()}: ${class.className}): Observable<any> {
-        return this.http.post<${class.className}>(this.baseUrl, ${class.className});
+        return this.http.post<${class.className}>(this.baseUrl, ${class.className.toLowerCase()});
     }
     get${class.className}ById(id: number): Observable<${class.className}> {
         return this.http.get<${class.className}>(`${this.baseUrl}/${id}`);
     }
     update${class.className} (${class.className.toLowerCase()}: ${class.className}, id: number): Observable<any> {
-        return this.http.put<${class.className}>(`${this.baseUrl}/${id}`, ${class.className});
+        return this.http.put<${class.className}>(`${this.baseUrl}/${id}`, ${class.className.toLowerCase()});
     }
     delete${class.className} (id: number): Observable<any> {
         return this.http.delete<${class.className}>(`${this.baseUrl}/${id}`);
