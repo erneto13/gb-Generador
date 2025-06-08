@@ -1,6 +1,0 @@
-export interface ${class.className}{
-    #foreach($field in $class.fields)
-        ${field.name}: ${field.type};
-    #end
-
-}

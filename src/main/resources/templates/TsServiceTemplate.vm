@@ -2,27 +2,32 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject, Observer, tap } from 'rxjs';
 import { ${class.className} } from '../../../models/${class.className}';
+
 @Injectable({
 providedIn: 'root'
 })
+
 export class ${class.className}Service {
+
     constructor(
-    private httpClient: HttpClient
-    ){}
+    private http: HttpClient
+    ) { }
+
     private baseUrl = "http://localhost:8080/api/";
-   getAll${class.className}(): Observable<${class.className}[]> {
-        return this.httpClient.get<${class.className}[]>(this.baseUrl);
-   }
+
+    getAll${class.className}(): Observable<${class.className}[]> {
+         return this.http.get<${class.className}[]>(this.baseUrl);
+    }
     create${class.className} (${class.className.toLowerCase()}: ${class.className}): Observable<any> {
-        return this.httpClient.post<${class.className}>(this.baseUrl, ${class.className});
+        return this.http.post<${class.className}>(this.baseUrl, ${class.className});
     }
     get${class.className}ById(id: number): Observable<${class.className}> {
-        return this.httpClient.get<${class.className}>(`${this.baseUrl}/${id}`);
+        return this.http.get<${class.className}>(`${this.baseUrl}/${id}`);
     }
     update${class.className} (${class.className.toLowerCase()}: ${class.className}, id: number): Observable<any> {
-        return this.httpClient.put<${class.className}>(`${this.baseUrl}/${id}`, ${class.className});
+        return this.http.put<${class.className}>(`${this.baseUrl}/${id}`, ${class.className});
     }
     delete${class.className} (id: number): Observable<any> {
-        return this.httpClient.delete<${class.className}>(`${this.baseUrl}/${id}`);
+        return this.http.delete<${class.className}>(`${this.baseUrl}/${id}`);
     }
 }
