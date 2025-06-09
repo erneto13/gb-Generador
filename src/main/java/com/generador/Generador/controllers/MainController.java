@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 public class MainController {
-    @PostMapping("/test")
+
+    @PostMapping("/generate")
     public ResponseEntity<String> test(@RequestBody String payload) {
         ClassGenerator classGenerator = new ClassGenerator(new JSONArray(payload));
         classGenerator.generate();
