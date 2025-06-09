@@ -1,5 +1,8 @@
 package util;
 
+import org.apache.velocity.Template;
+import org.apache.velocity.app.VelocityEngine;
+import org.apache.velocity.context.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -8,10 +11,8 @@ import java.io.FileWriter;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.List;
-
-import org.apache.velocity.Template;
-import org.apache.velocity.app.VelocityEngine;
-import org.apache.velocity.context.Context;
+import java.util.Map;
+import java.util.ArrayList;
 
 public class ClassGenerator {
 
@@ -21,7 +22,28 @@ public class ClassGenerator {
     private static final String TS_FILES_DIR = "TsFiles";
     private static final String TEMPLATES_DIR = "src/main/resources/templates/";
 
-    private JSONArray jsonArray;
+    // Mapeo de plantillas Java a sus paquetes de destino
+    private static final Map<String, String> JAVA_TEMPLATES_TO_PACKAGES = Map.of(
+            "ClassTemplate.vm", "models",
+            "ControllerTemplate.vm", "controllers",
+            "RepositoryTemplate.vm", "repositories",
+            "ServiceTemplate.vm", "services"
+    );
+
+    // Mapeo de plantillas TypeScript a sus paquetes de destino
+    private static final Map<String, String> TS_TEMPLATES_TO_PACKAGES = Map.of(
+            "TsModelTemplate.vm", "interfaces",
+            "TsServiceTemplate.vm", "services"
+    );
+
+    // Mapeo de sufijos para nombres de archivo Java
+    private static final Map<String, String> SUFFIX_MAP = Map.of(
+            "controllers", "Controller",
+            "repositories", "Repository",
+            "services", "Service"
+    );
+
+    private final JSONArray jsonArray;
 
     public ClassGenerator(JSONArray jsonArray) {
         this.jsonArray = jsonArray;
@@ -36,12 +58,12 @@ public class ClassGenerator {
             String projectName = projectObject.getString("projectName");
 
             // 1. Crear la estructura de paquetes base
-            generatePackage("JavaFiles/controllers", projectName);
-            generatePackage("JavaFiles/repositories", projectName);
-            generatePackage("JavaFiles/services", projectName);
-            generatePackage("JavaFiles/models", projectName);
-            generatePackage("TsFiles/interfaces", projectName);
-            generatePackage("TsFiles/services", projectName);
+            generatePackage(JAVA_FILES_DIR + "/controllers", projectName);
+            generatePackage(JAVA_FILES_DIR + "/repositories", projectName);
+            generatePackage(JAVA_FILES_DIR + "/services", projectName);
+            generatePackage(JAVA_FILES_DIR + "/models", projectName);
+            generatePackage(TS_FILES_DIR + "/interfaces", projectName);
+            generatePackage(TS_FILES_DIR + "/services", projectName);
 
             // 2. Procesar la lista de paquetes personalizados, si existe
             if (projectObject.has("package")) {
@@ -51,7 +73,7 @@ public class ClassGenerator {
                     String packageName = packageObj.getString("packageName");
 
                     // Crear el directorio para el paquete personalizado
-                    generatePackage("JavaFiles/" + packageName, projectName);
+                    generatePackage(JAVA_FILES_DIR + "/" + packageName, projectName);
 
                     JSONArray classes = packageObj.getJSONArray("classes");
                     for (int k = 0; k < classes.length(); k++) {
@@ -70,116 +92,164 @@ public class ClassGenerator {
     }
 
     public void generatePackage(String packageName, String projectName) {
-        File packageDir = new File("output/" + projectName + "/" + packageName);
+        File packageDir = new File(OUTPUT_DIR + "/" + projectName + "/" + packageName);
         if (!packageDir.exists()) {
             packageDir.mkdirs();
         }
     }
 
     public void generateClass(JSONObject classe, String packageName, String projectName) {
-        String baseJavaPath = "output/" + projectName + "/" + "JavaFiles/";
-        String baseTsPath = "output/" + projectName + "/TsFiles/";
-        List<String> javaTemplates = List.of("ClassTemplate.vm", "ControllerTemplate.vm", "RepositoryTemplate.vm", "ServiceTemplate.vm");
-        List<String> tsTemplates = List.of("TsModelTemplate.vm", "TsServiceTemplate.vm");
-        HashMap<String, String> javaPackagesToTemplates = new HashMap<>();
-        javaPackagesToTemplates.put("ClassTemplate.vm", "models");
-        javaPackagesToTemplates.put("ControllerTemplate.vm", "controllers");
-        javaPackagesToTemplates.put("RepositoryTemplate.vm", "repositories");
-        javaPackagesToTemplates.put("ServiceTemplate.vm", "services");
-        HashMap<String, String> tsPackagesToTemplates = new HashMap<>();
-        tsPackagesToTemplates.put("TsModelTemplate.vm", "interfaces");
-        tsPackagesToTemplates.put("TsServiceTemplate.vm", "services");
         try {
-            // Generación de archivos Java
-            for (String template : javaTemplates) {
-                VelocityEngine velocityEngine = new VelocityEngine();
-                velocityEngine.init();
-                Template jTemplate = velocityEngine.getTemplate(TEMPLATES_DIR + template);
-                Context context = new org.apache.velocity.VelocityContext();
-                StringWriter writer = new StringWriter();
-                String packageTarget = javaPackagesToTemplates.get(template);
-                String className = classe.getString("className");
-                String fileName = className;
-                File file;
+            // Configurar VelocityEngine una sola vez
+            VelocityEngine velocityEngine = new VelocityEngine();
+            velocityEngine.setProperty(VelocityEngine.RESOURCE_LOADER, "file");
+            velocityEngine.setProperty("file.resource.loader.path", TEMPLATES_DIR);
+            velocityEngine.init();
 
-                // Determina el nombre del archivo y la ruta de destino
-                if (template.equals("ClassTemplate.vm")) {
-                    // El archivo de la clase principal va en su paquete correspondiente (ej: models, o uno personalizado)
-                    file = new File(baseJavaPath + packageName + "/" + fileName + ".java");
-                } else {
-                    // Los archivos de Controller, Service, Repository usan sufijos y van a sus paquetes estándar
-                    String suffix = packageTarget.substring(0, 1).toUpperCase() + packageTarget.substring(1, packageTarget.length() - 1); // Controller, Service, etc.
-                    fileName += suffix;
-                    file = new File(baseJavaPath + packageTarget + "/" + fileName + ".java");
-                }
+            // Generar archivos Java
+            generateJavaFiles(velocityEngine, classe, packageName, projectName);
 
-                if (!file.exists()) {
-                    file.createNewFile();
-                    // Añade los datos al contexto de Velocity
-                    context.put("class", classe.toMap());
-                    context.put("projectName", projectName);
-                    context.put("packageName", packageName); // Paquete original de la clase
-                    context.put("packageTarget", packageTarget); // Paquete destino del archivo actual
+            // Generar archivos TypeScript
+            generateTsFiles(velocityEngine, classe, projectName);
 
-                    jTemplate.merge(context, writer);
-                    try (FileWriter fileWriter = new FileWriter(file)) {
-                        fileWriter.write(writer.toString());
-                    }
-                }
-            }
-
-            // Generación de archivos TypeScript
-            for (String template : tsTemplates) {
-                VelocityEngine velocityEngine = new VelocityEngine();
-                velocityEngine.init();
-                Template tsTemplate = velocityEngine.getTemplate(TEMPLATES_DIR + template);
-                Context context = new org.apache.velocity.VelocityContext();
-                StringWriter writer = new StringWriter();
-                String packageTarget = tsPackagesToTemplates.get(template);
-                if (packageTarget != null) {
-                    File file = new File(baseTsPath + packageTarget + "/" + classe.getString("className") + ".ts");
-                    if (!file.exists()) {
-                        file.createNewFile();
-                    }
-                    context.put("class", classe.toMap());
-                    context.put("projectName", projectName);
-                    context.put("packageName", packageTarget);
-                    tsTemplate.merge(context, writer);
-                    try (FileWriter fileWriter = new FileWriter(file)) {
-                        fileWriter.write(writer.toString());
-                    }
-                }
-            }
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    // Los métodos de ayuda no necesitan cambios
-    public String dataTypeJavaEquals(String type) {
-        if (type.equalsIgnoreCase("int") || type.equalsIgnoreCase("Integer")) {
-            return "int";
-        } else if (type.equalsIgnoreCase("long") || type.equalsIgnoreCase("Long")) {
-            return "long";
-        } else if (type.equalsIgnoreCase("double") || type.equalsIgnoreCase("Double")) {
-            return "double";
-        } else if (type.equalsIgnoreCase("float") || type.equalsIgnoreCase("Float")) {
-            return "float";
-        } else if (type.equalsIgnoreCase("boolean") || type.equalsIgnoreCase("Boolean")) {
-            return "boolean";
-        } else if (type.equalsIgnoreCase("char") || type.equalsIgnoreCase("Character")) {
-            return "char";
-        } else if (type.equalsIgnoreCase("byte") || type.equalsIgnoreCase("Byte")) {
-            return "byte";
-        } else if (type.equalsIgnoreCase("short") || type.equalsIgnoreCase("Short")) {
-            return "short";
-        } else if (type.equalsIgnoreCase("String")) {
-            return "String";
-        } else {
-            return "Object";
+    private void generateJavaFiles(VelocityEngine velocityEngine, JSONObject classe, String packageName, String projectName) throws Exception {
+        String baseJavaPath = OUTPUT_DIR + "/" + projectName + "/" + JAVA_FILES_DIR + "/";
+        String className = classe.getString("className");
+
+        for (Map.Entry<String, String> entry : JAVA_TEMPLATES_TO_PACKAGES.entrySet()) {
+            String templateName = entry.getKey();
+            String packageTarget = entry.getValue();
+
+            Template jTemplate = velocityEngine.getTemplate(templateName);
+            Context context = new org.apache.velocity.VelocityContext();
+            StringWriter writer = new StringWriter();
+
+            String fileName = className;
+            if (!templateName.equals("ClassTemplate.vm")) {
+                String suffix = SUFFIX_MAP.getOrDefault(packageTarget, "");
+                fileName += suffix;
+            }
+
+            File file = new File(baseJavaPath + packageTarget + "/" + fileName + ".java");
+
+            // Solo lo crea si el archivo no existe
+            if (!file.exists()) {
+                file.createNewFile();
+
+                Map<String, Object> classMap = new HashMap<>(classe.toMap());
+                classMap.put("idType", determineIdType(classe, false)); // falso para tipos Java
+
+                context.put("class", classMap);
+                context.put("projectName", projectName);
+                context.put("packageName", packageName);
+                context.put("packageTarget", packageTarget);
+
+                jTemplate.merge(context, writer);
+                try (FileWriter fileWriter = new FileWriter(file)) {
+                    fileWriter.write(writer.toString());
+                }
+            }
         }
     }
 
+    private void generateTsFiles(VelocityEngine velocityEngine, JSONObject classe, String projectName) throws Exception {
+        String baseTsPath = OUTPUT_DIR + "/" + projectName + "/" + TS_FILES_DIR + "/";
+        String className = classe.getString("className");
+
+        for (Map.Entry<String, String> entry : TS_TEMPLATES_TO_PACKAGES.entrySet()) {
+            String templateName = entry.getKey();
+            String packageTarget = entry.getValue();
+
+            Template tsTemplate = velocityEngine.getTemplate(templateName);
+            Context context = new org.apache.velocity.VelocityContext();
+            StringWriter writer = new StringWriter();
+
+            String tsFileName = className;
+            if (templateName.equals("TsModelTemplate.vm")) {
+                tsFileName = "I" + tsFileName;
+            } else if (templateName.equals("TsServiceTemplate.vm")) {
+                tsFileName += "Service";
+            }
+
+            File file = new File(baseTsPath + packageTarget + "/" + tsFileName + ".ts");
+
+            // Solo lo crea si el archivo no existe
+            if (!file.exists()) {
+                file.createNewFile();
+
+                Map<String, Object> classMapForTs = new HashMap<>(classe.toMap());
+                classMapForTs.put("idType", determineIdType(classe, true)); // true para tipos TypeScript
+
+                // Transformar los tipos de datos de los campos para TypeScript
+                if (classMapForTs.containsKey("fields") && classMapForTs.get("fields") instanceof List) {
+                    classMapForTs.put("fields", transformFieldsForTypeScript((List<Map<String, Object>>) classMapForTs.get("fields")));
+                }
+
+                context.put("class", classMapForTs);
+                context.put("projectName", projectName);
+                context.put("packageName", packageTarget);
+                tsTemplate.merge(context, writer);
+                try (FileWriter fileWriter = new FileWriter(file)) {
+                    fileWriter.write(writer.toString());
+                }
+            }
+        }
+    }
+
+    /**
+     * Determina el tipo de ID a partir del objeto JSON de la clase,
+     * transformándolo si es necesario para TypeScript.
+     *
+     * @param classe        The JSONObject representing the class.
+     * @param forTypeScript True if the type should be transformed for TypeScript, false for Java.
+     * @return The determined ID type string.
+     */
+    private String determineIdType(JSONObject classe, boolean forTypeScript) {
+        String determinedIdType = "Long"; // Default para Java
+
+        if (classe.has("idType")) {
+            determinedIdType = classe.getString("idType");
+        } else if (classe.has("fields")) {
+            JSONArray fields = classe.getJSONArray("fields");
+            for (int j = 0; j < fields.length(); j++) {
+                JSONObject field = fields.getJSONObject(j);
+                if (field.optBoolean("isIdField", false) || field.optBoolean("isId", false) || "id".equalsIgnoreCase(field.optString("name"))) {
+                    if (field.has("type")) {
+                        determinedIdType = field.getString("type");
+                        break;
+                    }
+                }
+            }
+        }
+        return forTypeScript ? dataTypeTsEquals(determinedIdType) : determinedIdType;
+    }
+
+    /**
+     * Transforma los tipos de datos de los campos para TypeScript.
+     *
+     * @param fields La lista de campos a transformar.
+     * @return La nueva lista con los tipos de datos transformados.
+     */
+    private List<Map<String, Object>> transformFieldsForTypeScript(List<Map<String, Object>> fields) {
+        List<Map<String, Object>> transformedFields = new ArrayList<>();
+        for (Map<String, Object> field : fields) {
+            Map<String, Object> newField = new HashMap<>(field);
+            if (newField.containsKey("type") && newField.get("type") instanceof String) {
+                newField.put("type", dataTypeTsEquals((String) newField.get("type")));
+            }
+            transformedFields.add(newField);
+        }
+        return transformedFields;
+    }
+
+    /**
+     * Converts Java data types to their TypeScript equivalents.
+     */
     public String dataTypeTsEquals(String type) {
         if (type.equalsIgnoreCase("int") || type.equalsIgnoreCase("Integer") ||
                 type.equalsIgnoreCase("long") || type.equalsIgnoreCase("Long") ||
@@ -191,6 +261,8 @@ public class ClassGenerator {
         } else if (type.equalsIgnoreCase("boolean") || type.equalsIgnoreCase("Boolean")) {
             return "boolean";
         } else if (type.equalsIgnoreCase("char") || type.equalsIgnoreCase("Character") || type.equalsIgnoreCase("String")) {
+            return "string";
+        } else if (type.equalsIgnoreCase("Date") || type.equalsIgnoreCase("LocalDate") || type.equalsIgnoreCase("LocalDateTime")) {
             return "string";
         } else {
             return "any";
