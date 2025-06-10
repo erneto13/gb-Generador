@@ -1,27 +1,31 @@
 package util;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
 public class ProyectGenerator {
     private String targetOutputPath;
     private String projectName;
     private final String SpringBootUrl = " https://start.spring.io/starter.zip";
+
     public ProyectGenerator(String targetOutputPath, String projectName) {
         this.targetOutputPath = targetOutputPath;
         this.projectName = projectName;
     }
-    public boolean generarSpringProyect(){
-        try{
+
+    public boolean generarSpringProyect() {
+        try {
             String params = "dependencies=web,data-jpa,h2,lombok" +
-                "&type=maven-project" +
-                "&language=java" +
-                "&name=" + this.projectName +
-                "&groupId=com.example" +
-                "&artifactId=" + this.projectName +
-                "&packageName=com.example." + this.projectName +
-                "&javaVersion=17";
+                    "&type=maven-project" +
+                    "&language=java" +
+                    "&name=" + this.projectName +
+                    "&groupId=com.example" +
+                    "&artifactId=" + this.projectName +
+                    "&packageName=com.example." + this.projectName +
+                    "&javaVersion=17";
             URL url = new URL(this.SpringBootUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
@@ -54,12 +58,13 @@ public class ProyectGenerator {
             }
             unZipProject();
             return true;
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
     }
-    public boolean unZipProject(){
+
+    public boolean unZipProject() {
         try {
             File zipFile = new File(this.targetOutputPath, this.projectName + ".zip");
             if (!zipFile.exists()) {
