@@ -259,50 +259,6 @@ public class ClassGenerator {
         }
     }
 
-    private void generateFullSqlSchema(List<JSONObject> entityClasses, String outputDir, String projectName) throws Exception {
-        if (entityClasses.isEmpty()) {
-            System.out.println("No hay entidades para generar el script SQL completo para el proyecto " + projectName + ".");
-            return;
-        }
-
-        VelocityEngine velocityEngine = new VelocityEngine();
-        velocityEngine.setProperty(VelocityEngine.RESOURCE_LOADER, "file");
-        velocityEngine.setProperty("file.resource.loader.path", TEMPLATES_DIR);
-        velocityEngine.init();
-
-        Template fullSchemaTemplate = velocityEngine.getTemplate("FullSchemaTemplate.vm");
-        Context context = new org.apache.velocity.VelocityContext();
-        StringWriter writer = new StringWriter();
-
-        List<Map<String, Object>> entityClassesAsMaps = new ArrayList<>();
-        for (JSONObject entityClass : entityClasses) {
-            entityClassesAsMaps.add(entityClass.toMap());
-        }
-
-        context.put("entityClasses", entityClassesAsMaps);
-        context.put("projectName", projectName);
-        context.put("date", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        String fileName = "V" + timestamp + "__full_schema_for_" + projectName.toLowerCase().replace("backend", "") + ".sql";
-
-        Path outputDirPath = Paths.get(outputDir);
-        if (!Files.exists(outputDirPath)) {
-            Files.createDirectories(outputDirPath);
-        }
-
-        Path filePath = outputDirPath.resolve(fileName);
-        if (!Files.exists(filePath)) {
-            fullSchemaTemplate.merge(context, writer);
-            try (FileWriter fileWriter = new FileWriter(filePath.toFile())) {
-                fileWriter.write(writer.toString());
-            }
-            System.out.println("Script SQL completo generado: " + filePath.toAbsolutePath());
-        } else {
-            System.out.println("El script SQL completo ya existe, no se sobrescribirá: " + filePath.toAbsolutePath());
-        }
-    }
-
     private String determineIdType(JSONObject classe, boolean forTypeScript) {
         String determinedIdType = "Long";
 
