@@ -7,9 +7,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ProyectGenerator {
-    private String targetOutputPath;
-    private String projectName;
-    private final String SpringBootUrl = " https://start.spring.io/starter.zip";
+    private final String targetOutputPath;
+    private final String projectName;
 
     public ProyectGenerator(String targetOutputPath, String projectName) {
         this.targetOutputPath = targetOutputPath;
@@ -18,24 +17,7 @@ public class ProyectGenerator {
 
     public boolean generarSpringProyect() {
         try {
-            String params = "dependencies=web,data-jpa,h2,lombok" +
-                    "&type=maven-project" +
-                    "&language=java" +
-                    "&name=" + this.projectName +
-                    "&groupId=com.example" +
-                    "&artifactId=" + this.projectName +
-                    "&packageName=com.example." + this.projectName +
-                    "&javaVersion=17";
-            URL url = new URL(this.SpringBootUrl);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = params.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
+            HttpURLConnection connection = getHttpURLConnection();
             try {
                 int responseCode = connection.getResponseCode();
                 if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -64,32 +46,38 @@ public class ProyectGenerator {
         }
     }
 
-    public boolean unZipProject() {
+    private HttpURLConnection getHttpURLConnection() throws IOException {
+        String params = "dependencies=web,data-jpa,h2,lombok" +
+                "&type=maven-project" +
+                "&language=java" +
+                "&name=" + this.projectName +
+                "&groupId=com.example" +
+                "&artifactId=" + this.projectName +
+                "&packageName=com.example." + this.projectName +
+                "&javaVersion=17";
+        String springBootUrl = " https://start.spring.io/starter.zip";
+        URL url = new URL(springBootUrl);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+        try (OutputStream os = connection.getOutputStream()) {
+            byte[] input = params.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+        return connection;
+    }
+
+    public void unZipProject() {
         try {
             File zipFile = new File(this.targetOutputPath, this.projectName + ".zip");
             if (!zipFile.exists()) {
                 System.out.println("El archivo ZIP no existe: " + zipFile.getAbsolutePath());
-                return false;
+                return;
             }
 
-            ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile));
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                File newFile = new File(this.targetOutputPath + "/" + this.projectName, entry.getName());
-                if (entry.isDirectory()) {
-                    newFile.mkdirs();
-                } else {
-                    new File(newFile.getParent()).mkdirs();
-                    try (FileOutputStream fos = new FileOutputStream(newFile)) {
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = zis.read(buffer)) != -1) {
-                            fos.write(buffer, 0, bytesRead);
-                        }
-                    }
-                }
-                zis.closeEntry();
-            }
+            ZipInputStream zis = getZipInputStream(zipFile);
             zis.close();
             //Remove the zip file after extraction
             if (zipFile.delete()) {
@@ -97,10 +85,30 @@ public class ProyectGenerator {
             } else {
                 System.out.println("No se pudo eliminar el archivo ZIP: " + zipFile.getAbsolutePath());
             }
-            return true;
         } catch (IOException e) {
             e.printStackTrace();
-            return false;
         }
+    }
+
+    private ZipInputStream getZipInputStream(File zipFile) throws IOException {
+        ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile));
+        ZipEntry entry;
+        while ((entry = zis.getNextEntry()) != null) {
+            File newFile = new File(this.targetOutputPath + "/" + this.projectName, entry.getName());
+            if (entry.isDirectory()) {
+                newFile.mkdirs();
+            } else {
+                new File(newFile.getParent()).mkdirs();
+                try (FileOutputStream fos = new FileOutputStream(newFile)) {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = zis.read(buffer)) != -1) {
+                        fos.write(buffer, 0, bytesRead);
+                    }
+                }
+            }
+            zis.closeEntry();
+        }
+        return zis;
     }
 }
