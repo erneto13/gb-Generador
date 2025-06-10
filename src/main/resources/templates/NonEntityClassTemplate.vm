@@ -1,0 +1,31 @@
+package ${packageName};
+
+public class ${class.className} {
+
+#foreach($field in $class.fields)
+private ${field.type} ${field.name};
+#end
+
+public ${class.className}() {
+}
+
+public ${class.className}(
+#foreach($field in $class.fields)
+    ${field.type} ${field.name}#if($foreach.hasNext),#end
+#end
+) {
+#foreach($field in $class.fields)
+this.${field.name} = ${field.name};
+#end
+}
+
+#foreach($field in $class.fields)
+public ${field.type} get${field.name.substring(0,1).toUpperCase()}${field.name.substring(1)}() {
+return ${field.name};
+}
+
+public void set${field.name.substring(0,1).toUpperCase()}${field.name.substring(1)}(${field.type} ${field.name}) {
+this.${field.name} = ${field.name};
+}
+#end
+}

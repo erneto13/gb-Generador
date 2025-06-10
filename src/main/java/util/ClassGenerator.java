@@ -8,35 +8,42 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class ClassGenerator {
 
-    // Directorios de rutas
     private static final String OUTPUT_DIR = "output";
-    private static final String JAVA_FILES_DIR = "JavaFiles";
-    private static final String TS_FILES_DIR = "TsFiles";
+    private static final String TEMP_JAVA_FILES_DIR = "tempJavaFiles";
+    private static final String TEMP_TS_FILES_DIR = "tempTsFiles";
+
+    private static final String ANGULAR_PROJECT_SRC_PATH = "src/app/";
+
     private static final String TEMPLATES_DIR = "src/main/resources/templates/";
 
-    // Mapeo de plantillas Java a sus paquetes de destino
     private static final Map<String, String> JAVA_TEMPLATES_TO_PACKAGES = Map.of(
             "ClassTemplate.vm", "models",
             "ControllerTemplate.vm", "controllers",
             "RepositoryTemplate.vm", "repositories",
-            "ServiceTemplate.vm", "services"
+            "ServiceTemplate.vm", "services",
+            "NonEntityClassTemplate.vm", "models"
     );
 
-    // Mapeo de plantillas TypeScript a sus paquetes de destino
     private static final Map<String, String> TS_TEMPLATES_TO_PACKAGES = Map.of(
             "TsModelTemplate.vm", "interfaces",
             "TsServiceTemplate.vm", "services"
     );
 
-    // Mapeo de sufijos para nombres de archivo Java
     private static final Map<String, String> SUFFIX_MAP = Map.of(
             "controllers", "Controller",
             "repositories", "Repository",
@@ -49,79 +56,118 @@ public class ClassGenerator {
         this.jsonArray = jsonArray;
     }
 
-    /**
-     * Método principal modificado para leer la nueva estructura JSON.
-     */
     public void generate() {
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject projectObject = jsonArray.getJSONObject(i);
             String projectName = projectObject.getString("projectName");
+            String javaProjectName = projectName + "Backend";
+            String angularProjectName = projectName + "Frontend";
 
-            // 1. Crear la estructura de paquetes base
-            generatePackage(JAVA_FILES_DIR + "/controllers", projectName);
-            generatePackage(JAVA_FILES_DIR + "/repositories", projectName);
-            generatePackage(JAVA_FILES_DIR + "/services", projectName);
-            generatePackage(JAVA_FILES_DIR + "/models", projectName);
-            generatePackage(TS_FILES_DIR + "/interfaces", projectName);
-            generatePackage(TS_FILES_DIR + "/services", projectName);
+            ProyectGenerator javaProjectGenerator = new ProyectGenerator(OUTPUT_DIR, javaProjectName);
+            System.out.println("GENERANDO PROYECTO SPRING :: " + javaProjectName);
+            if (javaProjectGenerator.generarSpringProyect()) {
+                System.out.println("PROYECTO GENERADO :: '" + javaProjectName);
+            } else {
+                System.err.println("ERROR AL GENERAR :: " + javaProjectName);
+                continue;
+            }
 
-            // 2. Procesar la lista de paquetes personalizados, si existe
+            ProyectGenerator angularProjectGenerator = new ProyectGenerator(OUTPUT_DIR, angularProjectName);
+            System.out.println("Generando proyecto Angular: " + angularProjectName);
+            if (angularProjectGenerator.generarAngularProyect(OUTPUT_DIR, angularProjectName)) {
+                System.out.println("Proyecto Angular '" + angularProjectName + "' generado exitosamente.");
+            } else {
+                System.err.println("Fallo al generar el proyecto Angular: " + angularProjectName);
+                continue;
+            }
+
+            String tempJavaPath = OUTPUT_DIR + "/" + TEMP_JAVA_FILES_DIR;
+            String tempTsPath = OUTPUT_DIR + "/" + TEMP_TS_FILES_DIR;
+
+            deleteDirectory(new File(tempJavaPath));
+            deleteDirectory(new File(tempTsPath));
+
+            generatePackage(tempTsPath + "/interfaces");
+            generatePackage(tempTsPath + "/services");
+
+            List<JSONObject> currentProjectEntityClasses = new ArrayList<>();
+
+            String basePackageForJava = "com.app." + javaProjectName.toLowerCase();
+
             if (projectObject.has("package")) {
                 JSONArray packages = projectObject.getJSONArray("package");
                 for (int j = 0; j < packages.length(); j++) {
                     JSONObject packageObj = packages.getJSONObject(j);
-                    String packageName = packageObj.getString("packageName");
-
-                    // Crear el directorio para el paquete personalizado
-                    generatePackage(JAVA_FILES_DIR + "/" + packageName, projectName);
+                    String packageNameFromConfig = packageObj.getString("packageName");
 
                     JSONArray classes = packageObj.getJSONArray("classes");
                     for (int k = 0; k < classes.length(); k++) {
-                        generateClass(classes.getJSONObject(k), packageName, projectName);
+                        JSONObject currentClass = classes.getJSONObject(k);
+                        if (currentClass.optBoolean("isEntity", false)) {
+                            currentProjectEntityClasses.add(currentClass);
+                        }
+                        generateClass(currentClass, basePackageForJava, packageNameFromConfig, tempJavaPath, tempTsPath, null, projectName);
                     }
                 }
             }
 
-            // 3. Procesar la clase individual, si existe
             if (projectObject.has("class")) {
                 JSONObject classObj = projectObject.getJSONObject("class");
-                // Las clases sueltas se generan en el paquete 'models' por defecto
-                generateClass(classObj, "models", projectName);
+                if (classObj.optBoolean("isEntity", false)) {
+                    currentProjectEntityClasses.add(classObj);
+                }
+                generateClass(classObj, basePackageForJava, "models", tempJavaPath, tempTsPath, null, projectName);
             }
+
+            String javaProjectSrcRoot = Paths.get(OUTPUT_DIR, javaProjectName, "src", "main", "java").toString();
+            String angularTargetBasePath = Paths.get(OUTPUT_DIR, angularProjectName, ANGULAR_PROJECT_SRC_PATH).toString();
+
+            moveGeneratedFiles(tempJavaPath, javaProjectSrcRoot);
+            moveGeneratedFiles(tempTsPath, angularTargetBasePath);
+
+            deleteDirectory(new File(tempJavaPath));
+            deleteDirectory(new File(tempTsPath));
         }
     }
 
-    public void generatePackage(String packageName, String projectName) {
-        File packageDir = new File(OUTPUT_DIR + "/" + projectName + "/" + packageName);
+    public void generatePackage(String fullPath) {
+        File packageDir = new File(fullPath);
         if (!packageDir.exists()) {
             packageDir.mkdirs();
         }
     }
 
-    public void generateClass(JSONObject classe, String packageName, String projectName) {
+    public void generateClass(JSONObject classe, String basePackageForJava, String subPackageNameFromConfig, String tempJavaPath, String tempTsPath, String tempSqlPath, String projectName) {
         try {
-            // Configurar VelocityEngine una sola vez
             VelocityEngine velocityEngine = new VelocityEngine();
             velocityEngine.setProperty(VelocityEngine.RESOURCE_LOADER, "file");
             velocityEngine.setProperty("file.resource.loader.path", TEMPLATES_DIR);
             velocityEngine.init();
 
-            // Generar archivos Java
-            generateJavaFiles(velocityEngine, classe, packageName, projectName);
-
-            // Generar archivos TypeScript
-            generateTsFiles(velocityEngine, classe, projectName);
+            generateJavaFiles(velocityEngine, classe, basePackageForJava, subPackageNameFromConfig, tempJavaPath, projectName);
+            generateTsFiles(velocityEngine, classe, tempTsPath, projectName);
 
         } catch (Exception e) {
+            System.err.println("Error al generar la clase para " + classe.optString("className", "desconocida") + ": " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private void generateJavaFiles(VelocityEngine velocityEngine, JSONObject classe, String packageName, String projectName) throws Exception {
-        String baseJavaPath = OUTPUT_DIR + "/" + projectName + "/" + JAVA_FILES_DIR + "/";
+    private void generateJavaFiles(VelocityEngine velocityEngine, JSONObject classe, String basePackageForJava, String subPackageNameFromConfig, String tempJavaPath, String projectName) throws Exception {
         String className = classe.getString("className");
+        boolean isEntity = classe.optBoolean("isEntity", false);
 
-        for (Map.Entry<String, String> entry : JAVA_TEMPLATES_TO_PACKAGES.entrySet()) {
+        Map<String, String> templatesToProcess = new HashMap<>();
+        if (isEntity) {
+            templatesToProcess.put("ClassTemplate.vm", "models");
+            templatesToProcess.put("ControllerTemplate.vm", "controllers");
+            templatesToProcess.put("RepositoryTemplate.vm", "repositories");
+            templatesToProcess.put("ServiceTemplate.vm", "services");
+        } else {
+            templatesToProcess.put("NonEntityClassTemplate.vm", "models");
+        }
+
+        for (Map.Entry<String, String> entry : templatesToProcess.entrySet()) {
             String templateName = entry.getKey();
             String packageTarget = entry.getValue();
 
@@ -130,23 +176,37 @@ public class ClassGenerator {
             StringWriter writer = new StringWriter();
 
             String fileName = className;
-            if (!templateName.equals("ClassTemplate.vm")) {
+            if (!templateName.equals("ClassTemplate.vm") && !templateName.equals("NonEntityClassTemplate.vm")) {
                 String suffix = SUFFIX_MAP.getOrDefault(packageTarget, "");
                 fileName += suffix;
             }
 
-            File file = new File(baseJavaPath + packageTarget + "/" + fileName + ".java");
+            String fullJavaPackage;
+            if (subPackageNameFromConfig != null && !subPackageNameFromConfig.isEmpty() && !"models".equalsIgnoreCase(subPackageNameFromConfig)) {
+                fullJavaPackage = basePackageForJava + "." + subPackageNameFromConfig + "." + packageTarget;
+            } else if (subPackageNameFromConfig != null && "models".equalsIgnoreCase(subPackageNameFromConfig) && !packageTarget.equalsIgnoreCase("models")) {
+                fullJavaPackage = basePackageForJava + "." + subPackageNameFromConfig + "." + packageTarget;
+            } else {
+                fullJavaPackage = basePackageForJava + "." + packageTarget;
+            }
 
-            // Solo lo crea si el archivo no existe
+            String relativePathInTemp = fullJavaPackage.replace(".", File.separator) + File.separator + fileName + ".java";
+            String fullPathInTemp = Paths.get(tempJavaPath, relativePathInTemp).toString();
+            File file = new File(fullPathInTemp);
+
+            if (!file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
+            }
+
             if (!file.exists()) {
                 file.createNewFile();
 
                 Map<String, Object> classMap = new HashMap<>(classe.toMap());
-                classMap.put("idType", determineIdType(classe, false)); // falso para tipos Java
+                classMap.put("idType", determineIdType(classe, false));
 
                 context.put("class", classMap);
                 context.put("projectName", projectName);
-                context.put("packageName", packageName);
+                context.put("packageName", fullJavaPackage);
                 context.put("packageTarget", packageTarget);
 
                 jTemplate.merge(context, writer);
@@ -157,8 +217,7 @@ public class ClassGenerator {
         }
     }
 
-    private void generateTsFiles(VelocityEngine velocityEngine, JSONObject classe, String projectName) throws Exception {
-        String baseTsPath = OUTPUT_DIR + "/" + projectName + "/" + TS_FILES_DIR + "/";
+    private void generateTsFiles(VelocityEngine velocityEngine, JSONObject classe, String tempTsPath, String projectName) throws Exception {
         String className = classe.getString("className");
 
         for (Map.Entry<String, String> entry : TS_TEMPLATES_TO_PACKAGES.entrySet()) {
@@ -176,16 +235,15 @@ public class ClassGenerator {
                 tsFileName += "Service";
             }
 
-            File file = new File(baseTsPath + packageTarget + "/" + tsFileName + ".ts");
+            String fullPath = Paths.get(tempTsPath, packageTarget, tsFileName + ".ts").toString();
+            File file = new File(fullPath);
 
-            // Solo lo crea si el archivo no existe
             if (!file.exists()) {
                 file.createNewFile();
 
                 Map<String, Object> classMapForTs = new HashMap<>(classe.toMap());
-                classMapForTs.put("idType", determineIdType(classe, true)); // true para tipos TypeScript
+                classMapForTs.put("idType", determineIdType(classe, true));
 
-                // Transformar los tipos de datos de los campos para TypeScript
                 if (classMapForTs.containsKey("fields") && classMapForTs.get("fields") instanceof List) {
                     classMapForTs.put("fields", transformFieldsForTypeScript((List<Map<String, Object>>) classMapForTs.get("fields")));
                 }
@@ -201,16 +259,52 @@ public class ClassGenerator {
         }
     }
 
-    /**
-     * Determina el tipo de ID a partir del objeto JSON de la clase,
-     * transformándolo si es necesario para TypeScript.
-     *
-     * @param classe        The JSONObject representing the class.
-     * @param forTypeScript True if the type should be transformed for TypeScript, false for Java.
-     * @return The determined ID type string.
-     */
+    private void generateFullSqlSchema(List<JSONObject> entityClasses, String outputDir, String projectName) throws Exception {
+        if (entityClasses.isEmpty()) {
+            System.out.println("No hay entidades para generar el script SQL completo para el proyecto " + projectName + ".");
+            return;
+        }
+
+        VelocityEngine velocityEngine = new VelocityEngine();
+        velocityEngine.setProperty(VelocityEngine.RESOURCE_LOADER, "file");
+        velocityEngine.setProperty("file.resource.loader.path", TEMPLATES_DIR);
+        velocityEngine.init();
+
+        Template fullSchemaTemplate = velocityEngine.getTemplate("FullSchemaTemplate.vm");
+        Context context = new org.apache.velocity.VelocityContext();
+        StringWriter writer = new StringWriter();
+
+        List<Map<String, Object>> entityClassesAsMaps = new ArrayList<>();
+        for (JSONObject entityClass : entityClasses) {
+            entityClassesAsMaps.add(entityClass.toMap());
+        }
+
+        context.put("entityClasses", entityClassesAsMaps);
+        context.put("projectName", projectName);
+        context.put("date", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String fileName = "V" + timestamp + "__full_schema_for_" + projectName.toLowerCase().replace("backend", "") + ".sql";
+
+        Path outputDirPath = Paths.get(outputDir);
+        if (!Files.exists(outputDirPath)) {
+            Files.createDirectories(outputDirPath);
+        }
+
+        Path filePath = outputDirPath.resolve(fileName);
+        if (!Files.exists(filePath)) {
+            fullSchemaTemplate.merge(context, writer);
+            try (FileWriter fileWriter = new FileWriter(filePath.toFile())) {
+                fileWriter.write(writer.toString());
+            }
+            System.out.println("Script SQL completo generado: " + filePath.toAbsolutePath());
+        } else {
+            System.out.println("El script SQL completo ya existe, no se sobrescribirá: " + filePath.toAbsolutePath());
+        }
+    }
+
     private String determineIdType(JSONObject classe, boolean forTypeScript) {
-        String determinedIdType = "Long"; // Default para Java
+        String determinedIdType = "Long";
 
         if (classe.has("idType")) {
             determinedIdType = classe.getString("idType");
@@ -229,12 +323,6 @@ public class ClassGenerator {
         return forTypeScript ? dataTypeTsEquals(determinedIdType) : determinedIdType;
     }
 
-    /**
-     * Transforma los tipos de datos de los campos para TypeScript.
-     *
-     * @param fields La lista de campos a transformar.
-     * @return La nueva lista con los tipos de datos transformados.
-     */
     private List<Map<String, Object>> transformFieldsForTypeScript(List<Map<String, Object>> fields) {
         List<Map<String, Object>> transformedFields = new ArrayList<>();
         for (Map<String, Object> field : fields) {
@@ -247,9 +335,6 @@ public class ClassGenerator {
         return transformedFields;
     }
 
-    /**
-     * Converts Java data types to their TypeScript equivalents.
-     */
     public String dataTypeTsEquals(String type) {
         if (type.equalsIgnoreCase("int") || type.equalsIgnoreCase("Integer") ||
                 type.equalsIgnoreCase("long") || type.equalsIgnoreCase("Long") ||
@@ -266,6 +351,55 @@ public class ClassGenerator {
             return "string";
         } else {
             return "any";
+        }
+    }
+
+    private void moveGeneratedFiles(String sourceDir, String targetDir) {
+        Path sourcePath = Paths.get(sourceDir);
+        Path targetPath = Paths.get(targetDir);
+
+        if (!Files.exists(sourcePath)) {
+            System.out.println("Directorio fuente no existe para mover: " + sourceDir);
+            return;
+        }
+
+        try {
+            Files.walk(sourcePath)
+                    .forEach(currentSourcePath -> {
+                        try {
+                            Path relativeSourcePath = sourcePath.relativize(currentSourcePath);
+                            Path currentTargetPath = targetPath.resolve(relativeSourcePath);
+
+                            if (Files.isDirectory(currentSourcePath)) {
+                                Files.createDirectories(currentTargetPath);
+                            } else {
+                                Path parentOfTargetFile = currentTargetPath.getParent();
+                                if (parentOfTargetFile != null) {
+                                    Files.createDirectories(parentOfTargetFile);
+                                }
+                                Files.copy(currentSourcePath, currentTargetPath, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        } catch (IOException e) {
+                            System.err.println("Error al mover el archivo/directorio: " + currentSourcePath + " a " + e.getMessage());
+                        }
+                    });
+            System.out.println("Archivos movidos de " + sourceDir + " a " + targetDir);
+        } catch (IOException e) {
+            System.err.println("Error al recorrer el directorio fuente: " + e.getMessage());
+        }
+    }
+
+    private void deleteDirectory(File directory) {
+        if (directory.exists()) {
+            try {
+                Files.walk(directory.toPath())
+                        .sorted(java.util.Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(File::delete);
+                System.out.println("Directorio temporal eliminado: " + directory.getAbsolutePath());
+            } catch (IOException e) {
+                System.err.println("Error al eliminar el directorio temporal: " + directory.getAbsolutePath() + " - " + e.getMessage());
+            }
         }
     }
 }

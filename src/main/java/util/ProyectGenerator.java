@@ -3,8 +3,14 @@ package util;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 public class ProyectGenerator {
     private final String targetOutputPath;
@@ -17,30 +23,44 @@ public class ProyectGenerator {
 
     public boolean generarSpringProyect() {
         try {
+            Path outputDirectory = Paths.get(this.targetOutputPath);
+            if (!Files.exists(outputDirectory)) {
+                try {
+                    Files.createDirectories(outputDirectory);
+                    System.out.println("Directorio de salida creado: " + outputDirectory.toAbsolutePath());
+                } catch (IOException e) {
+                    System.err.println("Fallo al crear el directorio de salida: " + outputDirectory.toAbsolutePath() + " - " + e.getMessage());
+                    return false;
+                }
+            }
+
             HttpURLConnection connection = getHttpURLConnection();
+            Path outputFile = Paths.get(this.targetOutputPath, this.projectName + ".zip");
             try {
                 int responseCode = connection.getResponseCode();
                 if (responseCode != HttpURLConnection.HTTP_OK) {
-                    System.out.println("Error: " + responseCode);
+                    System.out.println("Error en la respuesta de Spring Initializr: " + responseCode);
+                    try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        String line;
+                        System.err.println("Spring Initializr Error Details:");
+                        while ((line = errorReader.readLine()) != null) {
+                            System.err.println(line);
+                        }
+                    }
                     return false;
                 }
 
-                // Read the response
-                InputStream inputStream = connection.getInputStream();
-                File outputFile = new File(this.targetOutputPath, this.projectName + ".zip");
-                try (FileOutputStream fileOutputStream = new FileOutputStream(outputFile)) {
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        fileOutputStream.write(buffer, 0, bytesRead);
-                    }
+                try (InputStream inputStream = connection.getInputStream()) {
+                    Files.copy(inputStream, outputFile, StandardCopyOption.REPLACE_EXISTING);
                 }
+                System.out.println("Archivo ZIP de Spring Boot descargado en: " + outputFile.toAbsolutePath());
             } finally {
                 connection.disconnect();
             }
             unZipProject();
             return true;
         } catch (Exception e) {
+            System.err.println("Excepción al generar proyecto Spring Boot: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -51,11 +71,11 @@ public class ProyectGenerator {
                 "&type=maven-project" +
                 "&language=java" +
                 "&name=" + this.projectName +
-                "&groupId=com.example" +
+                "&groupId=com.app" +
                 "&artifactId=" + this.projectName +
-                "&packageName=com.example." + this.projectName +
+                "&packageName=com.app." + this.projectName.toLowerCase() +
                 "&javaVersion=17";
-        String springBootUrl = " https://start.spring.io/starter.zip";
+        String springBootUrl = "https://start.spring.io/starter.zip";
         URL url = new URL(springBootUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
@@ -71,44 +91,160 @@ public class ProyectGenerator {
 
     public void unZipProject() {
         try {
-            File zipFile = new File(this.targetOutputPath, this.projectName + ".zip");
-            if (!zipFile.exists()) {
-                System.out.println("El archivo ZIP no existe: " + zipFile.getAbsolutePath());
+            Path zipFile = Paths.get(this.targetOutputPath, this.projectName + ".zip");
+            if (!Files.exists(zipFile)) {
+                System.out.println("El archivo ZIP no existe para descomprimir: " + zipFile.toAbsolutePath());
                 return;
             }
 
-            ZipInputStream zis = getZipInputStream(zipFile);
-            zis.close();
-            //Remove the zip file after extraction
-            if (zipFile.delete()) {
-                System.out.println("Archivo ZIP eliminado: " + zipFile.getAbsolutePath());
-            } else {
-                System.out.println("No se pudo eliminar el archivo ZIP: " + zipFile.getAbsolutePath());
+            unzipFileContentFlattened(zipFile);
+
+            try {
+                Files.delete(zipFile);
+                System.out.println("Archivo ZIP eliminado: " + zipFile.toAbsolutePath());
+            } catch (IOException e) {
+                System.out.println("No se pudo eliminar el archivo ZIP: " + zipFile.toAbsolutePath() + " - " + e.getMessage());
             }
         } catch (IOException e) {
+            System.err.println("Excepción al descomprimir el proyecto: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private ZipInputStream getZipInputStream(File zipFile) throws IOException {
-        ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile));
-        ZipEntry entry;
-        while ((entry = zis.getNextEntry()) != null) {
-            File newFile = new File(this.targetOutputPath + "/" + this.projectName, entry.getName());
-            if (entry.isDirectory()) {
-                newFile.mkdirs();
-            } else {
-                new File(newFile.getParent()).mkdirs();
-                try (FileOutputStream fos = new FileOutputStream(newFile)) {
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = zis.read(buffer)) != -1) {
-                        fos.write(buffer, 0, bytesRead);
-                    }
+    private void unzipFileContentFlattened(Path zipFile) throws IOException {
+        Path destDir = Paths.get(this.targetOutputPath, this.projectName); // Aquí es donde debería residir el proyecto
+
+        if (!Files.exists(destDir)) {
+            Files.createDirectories(destDir);
+        }
+
+        String rootDirToSkip = null;
+
+        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
+            ZipEntry entry = zis.getNextEntry();
+            if (entry != null) {
+                String entryName = entry.getName();
+                int firstSlash = entryName.indexOf("/");
+                if (firstSlash != -1) {
+                    rootDirToSkip = entryName.substring(0, firstSlash + 1);
+                }
+                if (entry.isDirectory() && !rootDirToSkip.endsWith("/")) {
+                    rootDirToSkip += "/";
                 }
             }
-            zis.closeEntry();
         }
-        return zis;
+
+        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String entryName = entry.getName();
+                String adjustedPath = entryName;
+
+                if (rootDirToSkip != null && entryName.startsWith(rootDirToSkip)) {
+                    adjustedPath = entryName.substring(rootDirToSkip.length());
+                }
+
+                if (adjustedPath.isEmpty()) {
+                    continue;
+                }
+
+                Path newFilePath = destDir.resolve(adjustedPath);
+
+                if (entry.isDirectory()) {
+                    Files.createDirectories(newFilePath);
+                    System.out.println("Directorio creado: " + newFilePath.toAbsolutePath());
+                } else {
+                    Path parentDir = newFilePath.getParent();
+                    if (parentDir != null) {
+                        Files.createDirectories(parentDir);
+                    }
+                    Files.copy(zis, newFilePath, StandardCopyOption.REPLACE_EXISTING);
+                    System.out.println("Archivo extraído: " + newFilePath.toAbsolutePath());
+                }
+            }
+        }
+
+        System.out.println("Proyecto Spring Boot descomprimido con estructura correcta en: " +
+                destDir.toAbsolutePath());
+    }
+
+    public boolean generarAngularProyect(String outputDir, String projectName) {
+        if (!isAngularCliInstalled()) {
+            System.err.println("Angular CLI no está instalado o no está disponible en el PATH.");
+            System.err.println("Por favor instala Angular CLI ejecutando: npm install -g @angular/cli");
+            System.err.println("No se puede generar el proyecto Angular: " + projectName);
+            return false;
+        }
+
+        try {
+            Path baseOutput = Paths.get(outputDir);
+            if (!Files.exists(baseOutput)) {
+                Files.createDirectories(baseOutput);
+            }
+
+            String ngCommand = getAngularCliCommand();
+
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    ngCommand, "new", projectName,
+                    "--skip-install",
+                    "--defaults",
+                    "--routing=true",
+                    "--style=css"
+            );
+            processBuilder.directory(baseOutput.toFile());
+
+            System.out.println("Ejecutando comando: " + ngCommand + " new " + projectName + " en " + baseOutput.toAbsolutePath());
+            Process process = processBuilder.start();
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("NG-CLI Output: " + line);
+            }
+
+            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            while ((line = errorReader.readLine()) != null) {
+                System.err.println("NG-CLI ERROR: " + line);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("Comando 'ng new' ejecutado con éxito. Código de salida: " + exitCode);
+                return true;
+            } else {
+                System.err.println("El comando 'ng new' falló. Código de salida: " + exitCode);
+                return false;
+            }
+
+        } catch (IOException | InterruptedException e) {
+            System.err.println("Error al ejecutar el comando 'ng new': " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isAngularCliInstalled() {
+        try {
+            String ngCommand = getAngularCliCommand();
+            ProcessBuilder processBuilder = new ProcessBuilder(ngCommand, "--version");
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                while (reader.readLine() != null) {
+                }
+            }
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+        } catch (IOException | InterruptedException e) {
+            return false;
+        }
+    }
+
+    private String getAngularCliCommand() {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("win")) {
+            return "ng.cmd";
+        } else {
+            return "ng";
+        }
     }
 }
